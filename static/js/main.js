@@ -1,4 +1,4 @@
-var mainmodule=angular.module('mainmodule',['commmodule'])
+data=scope.$parent.commservice.json_to_obj(dt['data'])var mainmodule=angular.module('mainmodule',['commmodule'])
 mainmodule.controller('mainctrl', function($scope, commservice, $compile){
     //避免在directive中引用
     $scope.commservice=commservice
@@ -2337,7 +2337,7 @@ mainmodule.directive('trdeletebutton',function(){
                             return false
                         }
                         if(type=="logincheck"||type == "status" || type == "deploy"){
-                            var data=scope.$parent.commservice.json_to_obj(dt['data'])
+                            var data=dt['data']
                             scope.$parent.getresult(type, data)
                         }else{
                             if(id=="initoolsmanager"){
