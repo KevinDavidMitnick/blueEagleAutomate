@@ -121,11 +121,11 @@ def get_ret(code, message, status='info', isjson=True):
     else:
         return data
 
-class basehandler(tornado.web.RequestHandler):
+class baseHandler(tornado.web.RequestHandler):
     def get_current_user(self):
         return self.get_secure_cookie('user')
         
-class do_websocket(tornado.websocket.WebSocketHandler):
+class websocketHandler(tornado.websocket.WebSocketHandler):
     conn={}
     twisted_conn={}
     executor = ThreadPoolExecutor(2000)
@@ -204,7 +204,7 @@ class do_websocket(tornado.websocket.WebSocketHandler):
         del self.conn[self]
         
         
-class loginHandler(basehandler):
+class loginHandler(baseHandler):
     #用户会话
     user_session={}
     def get(self):
@@ -304,7 +304,7 @@ def write_csv(file, headers, dt):
     else:
         return False
         
-class mainhandler(basehandler):   
+class mainHandler(baseHandler):   
     def route_check(self, key):
         if re.match(r'%s'%key, self.request.path):
             return True
@@ -1352,6 +1352,9 @@ class mainhandler(basehandler):
         return self.do_task_handel()
         
     def task_log_download(self):
+        '''
+        self-privilege::下载任务日志::任务管理-任务记录-详情-下载日志
+        '''
         self.args['success']='日志下载成功'
         self.args['err']='日志下载失败,请检查'
         self.args['dotype']='task_log_download'
@@ -1435,7 +1438,7 @@ class mainhandler(basehandler):
                 ret=comm_lib.recv_socket_data(sk)
                 if ret:
                     sk.close()
-                    return ret
+                    return comm_lib.json_to_obj(ret)
 
     def task_create(self):
         '''
@@ -3587,7 +3590,7 @@ class mainhandler(basehandler):
             }))
 
     def do_request(self):
-        if hasattr(self, self.method):
+        if hasattr(self, self.method) and self.method in requestlist:
             if callable(getattr(self, self.method)):
                 log.info("exec function %s " % self.method)
                 #根据请求path取最后一个字段动态调用事先定义好的方法
@@ -3647,7 +3650,7 @@ class mainhandler(basehandler):
     def post(self):
         yield self.executor.submit(self.do_request)
 
-class interface(mainhandler):
+class interfaceHandler(mainHandler):
     #不检查登录
     def prepare(self):
         log.info('%s conn in, request %s;' % (self.request.remote_ip, self.request.uri))
@@ -3666,10 +3669,7 @@ class interface(mainhandler):
             #若arguments中没数据则使用body获取一次
             if self.request.body:
                 self.args=json.loads(self.request.body)
-        self.interfacelist=['get_host_info', 'get_group_info', 'asset_search', 
-                            'group_member_add', 'get_server_loginfo', 'get_server_info', 
-                            'add_informationcollect', 'get_servergroup_info', 'get_login_list']
-                            
+
         self.method=self.request.path.split(os.sep)[-1].replace('.',"_").replace('-', '_') 
         self.args.update({'filepath':curr_path+self.request.path})
         self.args.update({'curruser':self.get_current_user()})
@@ -3684,7 +3684,6 @@ class interface(mainhandler):
         self.assetapp=self.args.get('assetapp')
         self.c_user=self.args.get('c_user')
         self.iplist=self.args.get('iplist')
-        #super(mainhandler, self).initialize()
         verify_key=self.args.get('verify_key', None)
         db_verify_key=user_table.get_verify_key_info(name='verify_key')[0]['value']
         if db_verify_key != verify_key:
@@ -3693,10 +3692,12 @@ class interface(mainhandler):
             return self.write(get_ret(-100, "verify_key err.", status="err"))
 
     def get_host_info(self):
+        '''self-method'''
         return user_table.get_servergroup_info(line=self.line, product=self.product, app=self.app, 
                                 group=self.group, type='serverhost')
                                 
     def get_group_info(self):
+        '''self-method'''
         info=self.get_host_info()
         groupinfo={}
         for i in info:
@@ -3710,6 +3711,7 @@ class interface(mainhandler):
         return self.write(json.dumps(groupinfo))
         
     def asset_search(self):
+        '''self-method'''
         #资产查询
         info=user_table.assets_search(line=self.line, product=self.product,
                                     app=self.app, idc=self.idc, other_key=self.other_key, iplist=self.iplist)
@@ -3719,22 +3721,26 @@ class interface(mainhandler):
                 info_str+=i.get(k)+"|"
             info_str+='\n'
         return self.write(info_str)
-        
+
     def group_member_add(self):
+        '''self-method'''
         #组成员导入,可以配合资产查询使用
         #assetapp为资产的app, app为主机组分类
         return self.add_info_groupmember_html()
     
     def get_server_loginfo(self):
+        '''self-method'''
         self.login_check_key=['line', 'product', 'app', 'idc', 'owner']
         return self.write(json.dumps(self.get_server_login_info(self.iplist), ensure_ascii=False))
         
     def get_server_info(self):
+        '''self-method'''
         info=self.get_host_info()
         iplist=[i.get('member') for i in info]                      
         return self.write(json.dumps(iplist))
         
     def add_informationcollect(self):
+        '''self-method'''
         id=self.args.get('template_id')
         ip=self.args.get('ip')
         info=self.args.get('info')
@@ -3757,14 +3763,16 @@ class interface(mainhandler):
         return self.write(get_ret(0, '添加信息成功', status='info'))
         
     def get_servergroup_info(self):
+        '''self-method'''
         return self.get_ngrepeat_data_servergroup()
         
     def get_login_list(self):
+        '''self-method'''
         self.args['dotype']='mainpage'
         return self.write(json.dumps(self.do_get_servergroup_info(), ensure_ascii=False))
 
     def get(self):
-        if hasattr(self, self.method) and self.method in self.interfacelist:
+        if hasattr(self, self.method) and self.method in interfacelist:
             if callable(getattr(self, self.method)):
                 log.info("exec function %s " % self.method)
                 #根据请求path取最后一个字段动态调用事先定义好的方法
@@ -3794,14 +3802,14 @@ class eagledaemon(Daemon):
         }
         app=tornado.web.Application(
             [
-            (r'.*/login.html.*', loginHandler), 
-            (r'/$', loginHandler), 
-            (r'/interface/.*', interface), 
-            (r'/online/.*', do_websocket), 
-            (r'/upload', mainhandler), 
-            (r'/download', mainhandler), 
-            (r'/templates/.*', mainhandler)
-        ], **settings
+                (r'.*/login.html.*', loginHandler), 
+                (r'/$', loginHandler), 
+                (r'/interface/.*', interfaceHandler), 
+                (r'/online/.*', websocketHandler), 
+                (r'/upload', mainHandler), 
+                (r'/download', mainHandler), 
+                (r'/templates/.*', mainHandler)
+            ], **settings
         )
 
         httpserver=tornado.httpserver.HTTPServer(app)
@@ -3868,6 +3876,19 @@ def privilege_set(dest_obj_list):
                     log.err('privilege info set err.')
     log.info('privilege info set done.')
 
+def get_methodlist(clslist):
+    global requestlist, interfacelist
+    requestlist=[]
+    interfacelist=[]
+    for i in globals().keys():
+        if i in clslist:
+            for f in dir(globals()[i]):
+                fn_doc=str(getattr(globals()[i], f).__doc__).strip()
+                if i == 'mainHandler' and re.match(r'^self-privilege.*', fn_doc):
+                    requestlist.append(f)
+                elif i == 'interfaceHandler' and re.match(r'^self-method.*', fn_doc):
+                    interfacelist.append(f)
+                    
 if __name__=="__main__":
     tornado.options.parse_command_line()
     curr_path=os.path.split(os.path.realpath(__file__))[0]
@@ -3892,6 +3913,7 @@ if __name__=="__main__":
     dbinfo=comm_lib.get_db_info(p_dbcfg)
 
     user_table=user_table.user_table(dbinfo["ip"], dbinfo["port"], dbinfo["db_name"], dbinfo["user"], encrypt.decode_pwd(dbinfo["pwd"]))
+
     if not time_check():
        log.err('os and db time cmp err.')
        sys.exit()
@@ -3899,7 +3921,8 @@ if __name__=="__main__":
     help_msg = 'Usage: python %s <start|stop|restart|debug>' % sys.argv[0]
     eagle=eagledaemon(curr_path+'/tornado_pid.pid')
 
-    dest_obj_list=['mainhandler']
+    get_methodlist(['mainHandler', 'interfaceHandler'])
+    dest_obj_list=['mainHandler']
     privilege_set(dest_obj_list)
 
     if len(sys.argv) == 1: 
